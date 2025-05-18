@@ -37,12 +37,11 @@ def Save_Files(files):
     # Extraer todos las calles con multidigit
     for file in files:
         gdf = gpd.read_file(f"{dir}/multiDigs/multiDigs_SREETS_NAV_{file}.geojson")
+        if gdf.empty:
+            continue
         df = pd.read_csv(f'{dir}/nonCardPOIs/nonCardPOI_POI_{file}.csv')
         sts_with_N = df["LINK_ID"]
-        bugs_list = []
-        for i in sts_with_N:
-            bugs_list.append(gdf[gdf["link_id"] == i])
-        bugs = pd.concat(bugs_list)
+        bugs = gdf[gdf["link_id"].isin(sts_with_N)]
         bugs.to_file(f"{dir}/bugs/bugs_streets_{file}.geojson", driver="GeoJSON")
 
 
