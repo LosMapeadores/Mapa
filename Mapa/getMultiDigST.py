@@ -1,5 +1,7 @@
 import geopandas as gpd
 
+dir = "./Mapa/datasets"
+
 # Leer el GeoJSON
 def MultiDigs():
     files = [
@@ -33,9 +35,9 @@ def MultiDigs():
 def Save_Files(files):
     # Extraer todos las calles con multidigit
     for file in files:
-        gdf = gpd.read_file(f"./datasets/STREETS_NAV/{file}.geojson")
+        gdf = gpd.read_file(f"{dir}/STREETS_NAV/{file}.geojson")
         multiDigs = gdf[gdf["MULTIDIGIT"] == "Y"]
-        multiDigs.to_file(f"./datasets/multiDigs/multiDigs_{file}.geojson", driver="GeoJSON")
+        multiDigs.to_file(f"{dir}/multiDigs/multiDigs_{file}.geojson", driver="GeoJSON")
 
 files = MultiDigs()
 
