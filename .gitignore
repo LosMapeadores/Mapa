@@ -1,3 +1,11 @@
 # datasets
 
 datasets/
+
+# API key
+
+ApiKey.txt
+
+# Satellite Image
+
+satellite_tile.png
