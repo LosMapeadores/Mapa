@@ -73,7 +73,7 @@ def get_satellite_tile(lat,lon,zoom,tile_format,api_key):
 ### EXECUTION
 ##########################################################
 # Define the parameters for the tile request
-with open("./Mapa/APIkey.txt","r") as file:
+with open("./APIkey.txt","r") as file:
     api_key = file.read()
 latitude = 51.94347 
 longitude = 8.51692 

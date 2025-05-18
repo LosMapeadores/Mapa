@@ -2,7 +2,7 @@ import geopandas as gpd
 import pandas as pd
 import os
 
-dir = "./Mapa/datasets"
+dir = "./datasets"
 
 # Leer el GeoJSON
 def Files():
