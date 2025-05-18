@@ -1,87 +1,100 @@
+import pandas as pd
 import requests
 import math
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# Configuración global (ajusta según necesidades)
+TILE_SIZE = 512
+TILE_FORMAT = 'png'
+OUTPUT_DIR = "./map_tiles"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+# Tus funciones existentes (sin modificaciones)
 def lat_lon_to_tile(lat, lon, zoom):
-    """
-    Convert latitude and longitude to tile indices (x, y) at a given zoom level.
-    
-    :param lat: Latitude in degrees
-    :param lon: Longitude in degrees
-    :param zoom: Zoom level (0-19)
-    :return: Tuple (x, y) representing the tile indices
-    """
-    # Convert latitude and longitude to radians
     lat_rad = math.radians(lat)
     lon_rad = math.radians(lon)
-    
-    # Calculate n (number of tiles at the given zoom level)
     n = 2.0 ** zoom
-    
-    # Calculate x and y tile indices
     x = int((lon_rad - (-math.pi)) / (2 * math.pi) * n)
     y = int((1 - math.log(math.tan(lat_rad) + 1 / math.cos(lat_rad)) / math.pi) / 2 * n)
-    
     return (x, y)
 
-def tile_coords_to_lat_lon(x, y, zoom):
-    n = 2.0 ** zoom
-    lon_deg = x / n * 360.0 - 180.0
-    lat_rad = math.atan(math.sinh(math.pi * (1-2 * y/n)))
-    lat_def = math.degrees(lat_rad)
-    return (lat_def, lon_deg)
+def download_tile(lat, lon, zoom, api_key):
+    """Versión mejorada de get_satellite_tile para integración con CSV"""
+    try:
+        x, y = lat_lon_to_tile(lat, lon, zoom)
+        url = f'https://maps.hereapi.com/v3/base/mc/{zoom}/{x}/{y}/{TILE_FORMAT}?style=satellite.day&size={TILE_SIZE}&apiKey={api_key}'
+        
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            filename = os.path.join(OUTPUT_DIR, f"tile_{zoom}_{x}_{y}.{TILE_FORMAT}")
+            with open(filename, 'wb') as f:
+                f.write(response.content)
+            return True
+        print(f"Error HTTP {response.status_code} para ({lat}, {lon})")
+        return False
+    except Exception as e:
+        print(f"Error procesando ({lat}, {lon}): {str(e)}")
+        return False
 
-def get_tile_bounds(x, y, zoom):
-    lat1, lon1 = tile_coords_to_lat_lon(x,y,zoom)
-    lat2, lon2 = tile_coords_to_lat_lon(x+1, y, zoom)
-    lat3, lon3 = tile_coords_to_lat_lon(x+1,y+1,zoom)
-    lat4, lon4 = tile_coords_to_lat_lon(x,y+1,zoom)
-    return (lat1, lon1), (lat2, lon2), (lat3, lon3), (lat4, lon4)
+def process_all_bugs(csv_path, api_key, zoom=16, max_workers=8):
+    """Procesa todo el CSV de bugs de manera eficiente"""
+    # Leer CSV manteniendo todos los datos
+    df = pd.read_csv(csv_path)
+    
+    # Obtener coordenadas únicas para optimizar descargas
+    unique_coords = df[['latitud', 'longitud']].drop_duplicates()
+    total = len(unique_coords)
+    print(f"🔍 Procesando {total} ubicaciones únicas de {len(df)} bugs reportados")
+    
+    # Descargar tiles en paralelo
+    success = 0
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(download_tile, row['latitud'], row['longitud'], zoom, api_key): idx
+            for idx, row in unique_coords.iterrows()
+        }
+        
+        for i, future in enumerate(as_completed(futures), 1):
+            if future.result():
+                success += 1
+            if i % 10 == 0 or i == total:
+                print(f"Progreso: {i}/{total} | Exitosa: {success}")
+    
+    # Generar reporte final
+    print(f"\n✅ Resultado: {success}/{total} tiles descargados")
+    print(f"📁 Tiles guardados en: {os.path.abspath(OUTPUT_DIR)}")
+    
+    # Opcional: Generar archivo con metadatos completos
+    generate_metadata_file(df, zoom)
 
-def create_wkt_polygon(bounds):
-    (lat1, lon1), (lat2, lon2), (lat3, lon3), (lat4, lon4) = bounds
-    wkt = f"POLYGON(({lon1} {lat1}, {lon2} {lat2}, {lon3} {lat3}, {lon4} {lat4}, {lon1} {lat1}))"
-    return wkt
+def generate_metadata_file(df, zoom):
+    """Crea un CSV con metadatos geográficos extendidos"""
+    metadata = []
+    for _, row in df.iterrows():
+        x, y = lat_lon_to_tile(row['latitud'], row['longitud'], zoom)
+        metadata.append({
+            'file_code': row['file_code'],
+            'link_id': row['link_id'],
+            'longitud': row['longitud'],
+            'latitud': row['latitud'],
+            'urban': row['urban'],
+            'func_class': row['func_class'],
+            'multidigit': row['multidigit'],
+            'tile_x': x,
+            'tile_y': y,
+            'tile_zoom': zoom
+        })
+    
+    metadata_path = os.path.join(OUTPUT_DIR, "bugs_metadata.csv")
+    pd.DataFrame(metadata).to_csv(metadata_path, index=False)
+    print(f"📄 Metadatos guardados en: {metadata_path}")
 
-
-
-def get_satellite_tile(lat,lon,zoom,tile_format,api_key):
-
-    x,y =lat_lon_to_tile(lat, lon, zoom)
-
-
-    # Construct the URL for the map tile API
-    url = f'https://maps.hereapi.com/v3/base/mc/{zoom}/{x}/{y}/{tile_format}&style=satellite.day&size={tile_size}?apiKey={api_key}'
-
-    # Make the request
-    response = requests.get(url)
-
-    # Check if the request was successful
-    if response.status_code == 200:
-        # Save the tile to a file
-        with open(f'satellite_tile.{tile_format}', 'wb') as file:
-            file.write(response.content)
-        print('Tile saved successfully.')
-    else:
-        print(f'Failed to retrieve tile. Status code: {response.status_code}')
-
-    bounds = get_tile_bounds(x,y, zoom)
-    wkt_polygon = create_wkt_polygon(bounds)
-    return wkt_polygon
-
-##########################################################
-### EXECUTION
-##########################################################
-# Define the parameters for the tile request
-with open("./APIkey.txt","r") as file:
-    api_key = file.read()
-latitude = 51.94347 
-longitude = 8.51692 
-zoom_level = 16  # Zoom level
-tile_size = 512  # Tile size in pixels
-tile_format = 'png'  # Tile format
-
-# Execute request and save tile
-wkt_bounds = get_satellite_tile(latitude,longitude,zoom_level,tile_format,api_key)
-print(wkt_bounds)
-
+# Ejecución principal
+if __name__ == "__main__":
+    # Configuración
+    CSV_PATH = "./datasets/bug_coords/ALL_BUGS_COORDS.csv"
+    API_KEY = open("./APIkey.txt").read().strip()
+    
+    # Procesar todo
+    process_all_bugs(CSV_PATH, API_KEY, zoom=16)
