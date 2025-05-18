@@ -2,18 +2,20 @@ import geopandas as gpd
 import os
 import pandas as pd
 
-def get_bug_files():
-    """Lista de códigos de archivos de bugs"""
+def get_files():
+    """Lista de códigos de archivos"""
     return [
-        "4815081", "4815085", "4815087", "4815090","4815091", 
-        "4815096", "4815097", "4815098", "4815099",
+        "4815075","4815078","4815079","4815081","4815083",
+        "4815084","4815085","4815086","4815087","4815090",
+        "4815091","4815096","4815097","4815098","4815099",
+        "4815425","4815428","4815429","4815440","4815441"
     ]
 
-def extract_bug_coordinates():
+def extract_all_coordinates():
     # Configuración de directorios
     base_dir = "./datasets"
-    bugs_dir = os.path.join(base_dir, "bugs")
-    output_dir = os.path.join(base_dir, "bug_coords")
+    streets_dir = os.path.join(base_dir, "STREETS_NAV")  # Cambiado a directorio de calles
+    output_dir = os.path.join(base_dir, "all_coords")    # Nuevo directorio para salida
     
     # Asegurar que existe el directorio de salida
     os.makedirs(output_dir, exist_ok=True)
@@ -21,20 +23,20 @@ def extract_bug_coordinates():
     # Lista para almacenar todos los datos
     all_data = []
     
-    for file_code in get_bug_files():
-        bug_file = f"BUGS_STREET_{file_code}.geojson"
-        input_path = os.path.join(bugs_dir, bug_file)
+    for file_code in get_files():
+        street_file = f"SREETS_NAV_{file_code}.geojson"  # Cambiado a archivos de calles
+        input_path = os.path.join(streets_dir, street_file)
         
         # Verificar si el archivo existe
         if not os.path.exists(input_path):
-            print(f"Archivo no encontrado: {bug_file}")
+            print(f"Archivo no encontrado: {street_file}")
             continue
         
         try:
             # Leer el archivo GeoJSON
             gdf = gpd.read_file(input_path)
             
-            # Extraer coordenadas de cada feature
+            # Extraer coordenadas de cada feature (todas las calles)
             for _, row in gdf.iterrows():
                 geom = row.geometry
                 
@@ -46,7 +48,7 @@ def extract_bug_coordinates():
                 else:
                     continue
                 
-                # Agregar datos a la lista
+                # Agregar datos a la lista (con todos los metadatos disponibles)
                 for lon, lat in coords:
                     all_data.append({
                         'file_code': file_code,
@@ -55,13 +57,15 @@ def extract_bug_coordinates():
                         'latitud': lat,
                         'urban': row.get('URBAN', 'N/A'),
                         'func_class': row.get('FUNC_CLASS', 'N/A'),
-                        'multidigit': row.get('MULTIDIGIT', 'N/A')
+                        'paved': row.get('PAVED', 'N/A'),
+                        'direction': row.get('DIR_TRAVEL', 'N/A')
+                        # Añade más propiedades si las necesitas
                     })
             
-            print(f"Procesado: {bug_file}")
+            print(f"Procesado: {street_file}")
             
         except Exception as e:
-            print(f"Error procesando {bug_file}: {str(e)}")
+            print(f"Error procesando {street_file}: {str(e)}")
             continue
     
     # Crear DataFrame con todos los datos
@@ -69,13 +73,13 @@ def extract_bug_coordinates():
         df = pd.DataFrame(all_data)
         
         # Guardar archivo consolidado
-        consolidated_path = os.path.join(output_dir, "ALL_BUGS_COORDS.csv")
+        consolidated_path = os.path.join(output_dir, "ALL_STREETS_COORDS.csv")
         df.to_csv(consolidated_path, index=False, encoding='utf-8')
         print(f"\nArchivo consolidado creado: {consolidated_path}")
         
-        # Guardar archivos individuales por código
+        # Opcional: Guardar archivos individuales por código
         for file_code, group in df.groupby('file_code'):
-            individual_path = os.path.join(output_dir, f"BUGS_COORDS_{file_code}.csv")
+            individual_path = os.path.join(output_dir, f"STREETS_COORDS_{file_code}.csv")
             group.to_csv(individual_path, index=False, encoding='utf-8')
         
         print(f"Se crearon {len(df['file_code'].unique())} archivos individuales")
@@ -83,6 +87,6 @@ def extract_bug_coordinates():
         print("No se encontraron datos para procesar")
 
 if __name__ == "__main__":
-    print("🚀 Iniciando extracción de coordenadas...")
-    extract_bug_coordinates()
+    print("Iniciando extracción de todas las coordenadas...")
+    extract_all_coordinates()
     print("Proceso completado")
